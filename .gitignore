@@ -2,6 +2,7 @@
 
 data-bin/
 model-bin/
+cadquery_models/pt01/exports/step/
 outputs/
 wandb/
 tmp_workspace/
