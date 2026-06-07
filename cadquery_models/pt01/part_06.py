@@ -2,60 +2,40 @@ from __future__ import annotations
 
 import cadquery as cq
 
+try:
+    from .common import extrude_profile
+except ImportError:
+    from common import extrude_profile
 
-BODY_WIDTH = 45.0
-BODY_LENGTH = 150.0
-THICKNESS = 4.0
-BIG_HOLE_DIAMETER = 18.0
-SLOT_LENGTH = 18.0
-SLOT_DIAMETER = 10.0
-HUB_RADIUS = 12.0
-HUB_HEIGHT = 6.5
-SMALL_HOLE_DIAMETER = 4.2
+
+OUTER_PROFILE = [
+    (-20.261, 73.163), (-18.138, 75.000), (18.138, 75.000), (19.900, 73.761),
+    (21.362, 70.256), (22.495, 61.133), (22.500, -60.461), (21.949, -67.536),
+    (20.434, -72.822), (18.138, -75.000), (-18.138, -75.000), (-19.900, -73.761),
+    (-21.362, -70.256), (-22.495, -61.133), (-22.500, 60.461), (-21.949, 67.536),
+    (-20.434, 72.822),
+]
+
+THICKNESS = 13.0
+CENTER_RING_OUTER = 30.0
+CENTER_RING_INNER = 22.15
+END_BOSS_OUTER = 23.0
+END_BOSS_INNER = 9.0
+END_BOSS_POS = (1.25, 51.2)
+SMALL_HOLE_DIAMETER = 3.3
+SMALL_HOLE_POS = [
+    (-14.21, 66.90), (16.79, 66.89), (-14.21, 35.90), (16.79, 35.90),
+    (-18.00, -41.17), (18.00, -41.17), (-18.00, -32.17), (18.00, -32.17),
+]
 
 
 def build() -> cq.Workplane:
-    plate = cq.Workplane("XY").rect(BODY_WIDTH, BODY_LENGTH).extrude(THICKNESS, both=True)
-    plate = plate.edges("|Z").fillet(2.0)
-    plate = plate.cut(
-        cq.Workplane("XY")
-        .center(0, BODY_LENGTH * 0.33)
-        .circle(BIG_HOLE_DIAMETER * 0.5)
-        .extrude(THICKNESS * 2.5, both=True)
-    )
-    plate = plate.cut(
-        cq.Workplane("XY")
-        .center(0, -BODY_LENGTH * 0.28)
-        .slot2D(SLOT_LENGTH, SLOT_DIAMETER, 0)
-        .extrude(THICKNESS * 2.5, both=True)
-    )
-    for point in [(-15.0, 55.0), (15.0, 55.0), (-12.0, -42.0), (12.0, -42.0)]:
-        plate = plate.cut(
-            cq.Workplane("XY")
-            .center(point[0], point[1])
-            .circle(SMALL_HOLE_DIAMETER * 0.5)
-            .extrude(THICKNESS * 2.5, both=True)
-        )
-    hub = (
-        cq.Workplane("XY")
-        .circle(HUB_RADIUS)
-        .extrude(HUB_HEIGHT)
-        .translate((0, 5.0, -THICKNESS * 0.5 - HUB_HEIGHT + 1.5))
-    )
-    hub = hub.cut(
-        cq.Workplane("XY")
-        .circle(4.2)
-        .extrude(HUB_HEIGHT * 2.0, both=True)
-        .translate((0, 5.0, -THICKNESS * 0.5 - HUB_HEIGHT * 0.5 + 1.5))
-    )
-    web = (
-        cq.Workplane("YZ")
-        .polyline([(0, 0), (0, 9.0), (30.0, 0)])
-        .close()
-        .extrude(BODY_WIDTH * 0.42, both=True)
-        .translate((0, -5.0, -THICKNESS * 0.5))
-    )
-    return plate.union(hub).union(web)
+    body = extrude_profile("XY", OUTER_PROFILE, THICKNESS)
+    center_ring = cq.Workplane("XY").circle(CENTER_RING_OUTER * 0.5).circle(CENTER_RING_INNER * 0.5).extrude(7.895).translate((0, 0, -THICKNESS * 0.5))
+    end_boss = cq.Workplane("XY").center(*END_BOSS_POS).circle(END_BOSS_OUTER * 0.5).circle(END_BOSS_INNER * 0.5).extrude(3.0)
+    body = body.union(center_ring).union(end_boss)
+    small_cuts = cq.Workplane("XY").pushPoints(SMALL_HOLE_POS).circle(SMALL_HOLE_DIAMETER * 0.5).extrude(THICKNESS * 0.75, both=True)
+    return body.cut(small_cuts)
 
 
 result = build()

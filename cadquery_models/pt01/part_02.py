@@ -3,74 +3,41 @@ from __future__ import annotations
 import cadquery as cq
 
 try:
-    from .common import tooth_tabs
+    from .common import extrude_profile, load_profile_points
 except ImportError:
-    from common import tooth_tabs
+    from common import extrude_profile, load_profile_points
 
 
-THICKNESS = 2.7
-OUTER_RADIUS = 31.0
-INNER_RADIUS = 9.0
-SWEEP_DEGREES = 128.0
-TOOTH_COUNT = 26
-TOOTH_HEIGHT = 3.0
-TOOTH_WIDTH = 2.6
-LARGE_HOLE_DIAMETER = 10.5
-SMALL_HOLE_DIAMETER = 4.0
+OUTER_PROFILE = load_profile_points(2)
+
+THICKNESS = 4.0
+CENTER_HOLE_DIAMETER = 8.5
+CENTER_HOLE_POS = (0.225, -0.486)
+SMALL_HOLE_DIAMETER = 3.2
+SMALL_HOLE_POS = (10.410, -0.180)
 
 
 def build() -> cq.Workplane:
-    base = (
+    body = extrude_profile("XZ", OUTER_PROFILE, THICKNESS)
+    body = body.cut(
         cq.Workplane("XZ")
-        .moveTo(0, 0)
-        .radiusArc((OUTER_RADIUS * 0.79, OUTER_RADIUS * 0.61), OUTER_RADIUS)
-        .radiusArc((OUTER_RADIUS, 0), OUTER_RADIUS * 0.55)
-        .lineTo(0, -OUTER_RADIUS * 0.72)
-        .close()
-        .extrude(THICKNESS * 0.5, both=True)
+        .center(*CENTER_HOLE_POS)
+        .circle(CENTER_HOLE_DIAMETER * 0.5)
+        .extrude(THICKNESS * 0.75, both=True)
     )
-    base = base.union(
+    body = body.cut(
         cq.Workplane("XZ")
-        .circle(INNER_RADIUS)
-        .extrude(THICKNESS * 0.5, both=True)
-        .translate((0, 0, -OUTER_RADIUS * 0.2))
+        .center(*SMALL_HOLE_POS)
+        .circle(SMALL_HOLE_DIAMETER * 0.5)
+        .extrude(THICKNESS * 0.75, both=True)
     )
-    base = base.cut(
+    body = body.cut(
         cq.Workplane("XZ")
-        .ellipse(LARGE_HOLE_DIAMETER * 0.6, LARGE_HOLE_DIAMETER * 0.42)
-        .extrude(THICKNESS, both=True)
-        .translate((0, 0, -3.0))
+        .center(-10.0, -1.0)
+        .circle(1.3)
+        .extrude(THICKNESS * 0.75, both=True)
     )
-    for point in [(-17.0, -1.0), (17.0, -1.0), (0.0, -20.0)]:
-        base = base.cut(
-            cq.Workplane("XZ")
-            .center(*point)
-            .circle(SMALL_HOLE_DIAMETER * 0.5)
-            .extrude(THICKNESS, both=True)
-        )
-    teeth = tooth_tabs(
-        plane="XZ",
-        count=TOOTH_COUNT,
-        radius=OUTER_RADIUS - TOOTH_HEIGHT * 0.8,
-        radial_depth=TOOTH_HEIGHT,
-        tangential_width=TOOTH_WIDTH,
-        thickness=THICKNESS,
-        start_angle=205.0,
-    )
-    for tooth in teeth:
-        center = tooth.val().Center()
-        angle = (cq.Vector(center.x, 0, center.z).getSignedAngle(cq.Vector(1, 0, 0)) * 180.0 / 3.141592653589793)
-        normalized = (angle + 360.0) % 360.0
-        if 140.0 <= normalized <= 320.0:
-            base = base.union(tooth)
-    rib = (
-        cq.Workplane("YZ")
-        .polyline([(0, 0), (THICKNESS, 0), (0, 18.0)])
-        .close()
-        .extrude(8.0, both=True)
-        .translate((0, 0, -8.0))
-    )
-    return base.union(rib)
+    return body
 
 
 result = build()

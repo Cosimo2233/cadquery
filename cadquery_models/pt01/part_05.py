@@ -3,43 +3,35 @@ from __future__ import annotations
 import cadquery as cq
 
 try:
-    from .common import simple_gear
+    from .common import extrude_profile, load_profile_points
 except ImportError:
-    from common import simple_gear
+    from common import extrude_profile, load_profile_points
 
 
-ROOT_RADIUS = 8.2
-TOOTH_HEIGHT = 3.4
-TOOTH_WIDTH = 4.0
-TOOTH_COUNT = 14
+OUTER_PROFILE = load_profile_points(5)
+
 LENGTH = 22.0
-BORE_DIAMETER = 7.2
-RIB_COUNT = 8
-RIB_DEPTH = 1.8
-RIB_WIDTH = 4.8
+BORE_DIAMETER = 4.3
+COUNTERBORE_DIAMETER = 14.0
+COUNTERBORE_DEPTH = 2.0
 
 
 def build() -> cq.Workplane:
-    body = simple_gear(
-        plane="XZ",
-        root_radius=ROOT_RADIUS,
-        tooth_count=TOOTH_COUNT,
-        tooth_height=TOOTH_HEIGHT,
-        tooth_width=TOOTH_WIDTH,
-        thickness=LENGTH,
-        bore_diameter=BORE_DIAMETER,
-        start_angle=360.0 / TOOTH_COUNT * 0.5,
+    body = extrude_profile("XZ", OUTER_PROFILE, LENGTH)
+    body = body.cut(cq.Workplane("XZ").circle(BORE_DIAMETER * 0.5).extrude(LENGTH * 0.75, both=True).translate((0, 0, -41.8)))
+    top_counterbore = (
+        cq.Workplane("XZ")
+        .circle(COUNTERBORE_DIAMETER * 0.5)
+        .extrude(COUNTERBORE_DEPTH)
+        .translate((0, 0, -41.8 - LENGTH * 0.5))
     )
-    for angle in range(RIB_COUNT):
-        rib = (
-            cq.Workplane("XY")
-            .transformed(rotate=(0, 0, 360.0 * angle / RIB_COUNT))
-            .center(ROOT_RADIUS - 0.8, 0)
-            .rect(2.2, RIB_WIDTH)
-            .extrude(LENGTH * 0.36, both=True)
-        )
-        body = body.cut(rib)
-    return body
+    bottom_counterbore = (
+        cq.Workplane("XZ")
+        .circle(COUNTERBORE_DIAMETER * 0.5)
+        .extrude(COUNTERBORE_DEPTH)
+        .translate((0, LENGTH - COUNTERBORE_DEPTH, -41.8 - LENGTH * 0.5))
+    )
+    return body.cut(top_counterbore).cut(bottom_counterbore)
 
 
 result = build()

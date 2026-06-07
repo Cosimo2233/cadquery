@@ -6,54 +6,45 @@ import cadquery as cq
 SIZE_X = 50.0
 SIZE_Y = 49.938
 HEIGHT = 23.0
-TOP_THICKNESS = 4.0
-LEG_THICKNESS = 5.0
+TOP_THICKNESS = 3.0
+LEG_WIDTH = 5.0
+TOP_Z_MIN = 4.766
+BOTTOM_Z = -15.234
+
+SLOT_POS = [
+    (-0.961, 67.961), (-0.961, 87.961), (15.626, 67.954), (-0.703, 77.731),
+    (15.379, 77.859), (-0.988, 97.904), (15.447, 97.745), (15.447, 87.745),
+]
+SMALL_HOLE_POS = [(-20.217, 77.760), (-20.167, 67.893), (-20.121, 87.745)]
 
 
 def build() -> cq.Workplane:
+    center_y = (57.037 + 106.975) * 0.5
     top = (
         cq.Workplane("XY")
+        .center(0, center_y)
         .rect(SIZE_X, SIZE_Y)
-        .extrude(TOP_THICKNESS * 0.5, both=True)
-        .translate((0, 0, HEIGHT * 0.5 - TOP_THICKNESS * 0.5))
+        .extrude(TOP_THICKNESS)
+        .translate((0, 0, TOP_Z_MIN))
     )
-    left_x = -17.0
-    for y in [12.0, 0.0, -12.0]:
-        top = top.cut(cq.Workplane("XY").center(left_x, y).circle(4.2).extrude(TOP_THICKNESS * 2.5, both=True))
-    for x in [2.0, 17.0]:
-        for y in [12.0, 0.0, -12.0]:
-            top = top.cut(cq.Workplane("XY").center(x, y).slot2D(12.0, 8.0, 0).extrude(TOP_THICKNESS * 2.5, both=True))
-    leg = (
-        cq.Workplane("XY")
-        .center(-SIZE_X * 0.5 + LEG_THICKNESS * 0.5, 0)
-        .rect(LEG_THICKNESS, SIZE_Y * 0.88)
-        .extrude(HEIGHT - TOP_THICKNESS)
-        .translate((0, 0, HEIGHT * 0.5 - TOP_THICKNESS - (HEIGHT - TOP_THICKNESS)))
-    )
-    legs = leg.union(leg.mirror("YZ"))
-    side_opening = (
-        cq.Workplane("XZ")
-        .center(0, -2.0)
-        .circle(8.0)
-        .extrude(LEG_THICKNESS * 2.2, both=True)
-        .translate((0, 0, -4.0))
-    )
-    legs = legs.cut(side_opening.translate((-(SIZE_X * 0.5 - LEG_THICKNESS * 0.5), 0, 0)))
-    legs = legs.cut(side_opening.translate(((SIZE_X * 0.5 - LEG_THICKNESS * 0.5), 0, 0)))
-    center_hole = (
-        cq.Workplane("XZ")
-        .center(0, -3.0)
-        .circle(7.0)
-        .extrude(SIZE_Y * 0.42, both=True)
-    )
+    for x, y in SLOT_POS:
+        top = top.cut(cq.Workplane("XY").center(x, y).slot2D(14.0, 8.0, 0).extrude(TOP_THICKNESS + 1.0).translate((0, 0, TOP_Z_MIN - 0.5)))
+    for x, y in SMALL_HOLE_POS:
+        top = top.cut(cq.Workplane("XY").center(x, y).circle(2.65).extrude(TOP_THICKNESS + 1.0).translate((0, 0, TOP_Z_MIN - 0.5)))
+    leg_height = TOP_Z_MIN - BOTTOM_Z
+    left_leg = cq.Workplane("XY").center(-22.5 + LEG_WIDTH * 0.5, center_y).rect(LEG_WIDTH, SIZE_Y).extrude(leg_height).translate((0, 0, BOTTOM_Z))
+    right_leg = cq.Workplane("XY").center(22.5 - LEG_WIDTH * 0.5, center_y).rect(LEG_WIDTH, SIZE_Y).extrude(leg_height).translate((0, 0, BOTTOM_Z))
+    side_hole = cq.Workplane("XZ").center(0, -4.5).circle(7.0).extrude(LEG_WIDTH * 1.2, both=True)
+    left_leg = left_leg.cut(side_hole.translate((-22.5 + LEG_WIDTH * 0.5, 0, 0)))
+    right_leg = right_leg.cut(side_hole.translate((22.5 - LEG_WIDTH * 0.5, 0, 0)))
     rib = (
         cq.Workplane("XZ")
-        .polyline([(-SIZE_X * 0.36, 0), (SIZE_X * 0.36, 0), (0, -HEIGHT * 0.42)])
+        .polyline([(-22.0, -15.0), (22.0, -15.0), (0.0, 4.7)])
         .close()
         .extrude(3.0, both=True)
-        .translate((0, 0, 2.5))
+        .translate((0, center_y, 0.0))
     )
-    return top.union(legs).union(rib).cut(center_hole)
+    return top.union(left_leg).union(right_leg).union(rib)
 
 
 result = build()

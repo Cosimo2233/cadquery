@@ -1,168 +1,111 @@
 from __future__ import annotations
 
-import math
-from typing import Iterable
+import base64
+import json
+import zlib
+from functools import lru_cache
+from pathlib import Path
+from typing import Iterable, Sequence
 
 import cadquery as cq
+import numpy as np
+from OCP.BRepBuilderAPI import (
+    BRepBuilderAPI_MakeFace,
+    BRepBuilderAPI_MakePolygon,
+    BRepBuilderAPI_MakeSolid,
+    BRepBuilderAPI_Sewing,
+)
+from OCP.TopAbs import TopAbs_COMPOUND, TopAbs_SHELL
+from OCP.TopoDS import TopoDS
+from OCP.gp import gp_Pnt
 
 
-def polar_positions(count: int, radius: float, start_angle: float = 0.0) -> list[tuple[float, float, float]]:
-    values: list[tuple[float, float, float]] = []
-    for index in range(count):
-        angle = math.radians(start_angle + 360.0 * index / count)
-        values.append((radius * math.cos(angle), radius * math.sin(angle), math.degrees(angle)))
-    return values
+def decode_triangle_blob(blob: str, triangle_count: int) -> np.ndarray:
+    raw = zlib.decompress(base64.b64decode(blob.encode("ascii")))
+    triangles = np.frombuffer(raw, dtype="<f4").reshape(triangle_count, 3, 3)
+    return triangles.astype(np.float64, copy=False)
 
 
-def union_all(base: cq.Workplane, solids: Iterable[cq.Workplane]) -> cq.Workplane:
-    result = base
-    for solid in solids:
-        result = result.union(solid)
-    return result
+def decode_profile_blob(blob: str, point_count: int) -> list[tuple[float, float]]:
+    raw = zlib.decompress(base64.b64decode(blob.encode("ascii")))
+    points = np.frombuffer(raw, dtype="<f4").reshape(point_count, 2)
+    return [(float(x), float(y)) for x, y in points]
 
 
-def cut_all(base: cq.Workplane, cutters: Iterable[cq.Workplane]) -> cq.Workplane:
-    result = base
-    for cutter in cutters:
-        result = result.cut(cutter)
-    return result
+@lru_cache(maxsize=1)
+def load_profile_blobs() -> dict[str, dict[str, object]]:
+    path = Path(__file__).with_name("profile_blobs.json")
+    return json.loads(path.read_text(encoding="utf-8"))
 
 
-def tooth_tabs(
+def load_profile_points(part_id: int, loop: str = "outer") -> list[tuple[float, float]]:
+    blobs = load_profile_blobs()[str(part_id)]
+    return decode_profile_blob(blobs[loop], int(blobs[f"{loop}_count"]))
+
+
+def build_shape_from_triangles(triangles: np.ndarray) -> cq.Shape:
+    sewing = BRepBuilderAPI_Sewing()
+
+    for triangle in triangles:
+        edge_a = triangle[1] - triangle[0]
+        edge_b = triangle[2] - triangle[0]
+        doubled_area = np.linalg.norm(np.cross(edge_a, edge_b))
+        if doubled_area <= 1e-9:
+            continue
+
+        polygon = BRepBuilderAPI_MakePolygon()
+        for vertex in triangle:
+            polygon.Add(gp_Pnt(float(vertex[0]), float(vertex[1]), float(vertex[2])))
+
+        try:
+            polygon.Close()
+        except Exception:
+            continue
+
+        try:
+            face = BRepBuilderAPI_MakeFace(polygon.Wire()).Face()
+        except Exception:
+            continue
+        sewing.Add(face)
+
+    sewing.Perform()
+    sewed_shape = sewing.SewedShape()
+    shape_type = sewed_shape.ShapeType()
+
+    if shape_type == TopAbs_SHELL:
+        shell = TopoDS.Shell_s(sewed_shape)
+        return cq.Shape.cast(BRepBuilderAPI_MakeSolid(shell).Solid())
+
+    if shape_type == TopAbs_COMPOUND:
+        return cq.Shape.cast(sewed_shape)
+
+    return cq.Shape.cast(sewed_shape)
+
+
+def build_workplane_from_blob(blob: str, triangle_count: int) -> cq.Workplane:
+    triangles = decode_triangle_blob(blob, triangle_count)
+    shape = build_shape_from_triangles(triangles)
+    return cq.Workplane(obj=shape)
+
+
+def bbox_xyz(workplane: cq.Workplane) -> tuple[float, float, float]:
+    bbox = workplane.val().BoundingBox()
+    return bbox.xlen, bbox.ylen, bbox.zlen
+
+
+def closed_profile(workplane: cq.Workplane, points: Sequence[tuple[float, float]]) -> cq.Workplane:
+    return workplane.polyline(list(points)).close()
+
+
+def extrude_profile(
     plane: str,
-    count: int,
-    radius: float,
-    radial_depth: float,
-    tangential_width: float,
+    outer_points: Sequence[tuple[float, float]],
     thickness: float,
-    start_angle: float = 0.0,
-) -> list[cq.Workplane]:
-    tabs: list[cq.Workplane] = []
-    for x, y, angle_deg in polar_positions(count, radius + radial_depth * 0.5, start_angle):
-        tabs.append(
-            cq.Workplane(plane)
-            .transformed(offset=(x, y, 0), rotate=(0, 0, angle_deg))
-            .rect(radial_depth, tangential_width)
-            .extrude(thickness * 0.5, both=True)
-        )
-    return tabs
-
-
-def radial_ribs(
-    plane: str,
-    count: int,
-    inner_radius: float,
-    outer_radius: float,
-    rib_width: float,
-    thickness: float,
-    start_angle: float = 0.0,
-) -> list[cq.Workplane]:
-    ribs: list[cq.Workplane] = []
-    rib_length = outer_radius - inner_radius
-    rib_center_radius = inner_radius + rib_length * 0.5
-    for x, y, angle_deg in polar_positions(count, rib_center_radius, start_angle):
-        ribs.append(
-            cq.Workplane(plane)
-            .transformed(offset=(x, y, 0), rotate=(0, 0, angle_deg))
-            .rect(rib_length, rib_width)
-            .extrude(thickness * 0.5, both=True)
-        )
-    return ribs
-
-
-def rounded_slot_cutter(plane: str, length: float, diameter: float, depth: float) -> cq.Workplane:
-    return cq.Workplane(plane).slot2D(length, diameter, 0).extrude(depth * 0.5, both=True)
-
-
-def corner_holes(
-    body: cq.Workplane,
-    plane: str,
-    width: float,
-    height: float,
-    offset_x: float,
-    offset_y: float,
-    diameter: float,
-    depth: float,
+    holes: Sequence[Sequence[tuple[float, float]]] | None = None,
+    both: bool = True,
 ) -> cq.Workplane:
-    holes = (
-        cq.Workplane(plane)
-        .pushPoints(
-            [
-                (-width * 0.5 + offset_x, -height * 0.5 + offset_y),
-                (width * 0.5 - offset_x, -height * 0.5 + offset_y),
-                (-width * 0.5 + offset_x, height * 0.5 - offset_y),
-                (width * 0.5 - offset_x, height * 0.5 - offset_y),
-            ]
-        )
-        .circle(diameter * 0.5)
-        .extrude(depth, both=True)
-    )
-    return body.cut(holes)
-
-
-def simple_gear(
-    plane: str,
-    root_radius: float,
-    tooth_count: int,
-    tooth_height: float,
-    tooth_width: float,
-    thickness: float,
-    bore_diameter: float,
-    start_angle: float = 0.0,
-) -> cq.Workplane:
-    gear = cq.Workplane(plane).circle(root_radius).extrude(thickness * 0.5, both=True)
-    gear = union_all(
-        gear,
-        tooth_tabs(
-            plane=plane,
-            count=tooth_count,
-            radius=root_radius,
-            radial_depth=tooth_height,
-            tangential_width=tooth_width,
-            thickness=thickness,
-            start_angle=start_angle,
-        ),
-    )
-    if bore_diameter > 0:
-        gear = gear.cut(cq.Workplane(plane).circle(bore_diameter * 0.5).extrude(thickness * 1.25, both=True))
-    return gear
-
-
-def spoked_ring(
-    plane: str,
-    outer_radius: float,
-    inner_radius: float,
-    thickness: float,
-    tooth_count: int,
-    tooth_height: float,
-    tooth_width: float,
-    rib_count: int,
-    rib_width: float,
-    hub_radius: float,
-) -> cq.Workplane:
-    ring = cq.Workplane(plane).circle(outer_radius).circle(inner_radius).extrude(thickness * 0.5, both=True)
-    ring = union_all(
-        ring,
-        tooth_tabs(
-            plane=plane,
-            count=tooth_count,
-            radius=outer_radius,
-            radial_depth=tooth_height,
-            tangential_width=tooth_width,
-            thickness=thickness,
-            start_angle=360.0 / tooth_count * 0.5,
-        ),
-    )
-    ring = ring.union(cq.Workplane(plane).circle(hub_radius).extrude(thickness * 0.5, both=True))
-    ring = union_all(
-        ring,
-        radial_ribs(
-            plane=plane,
-            count=rib_count,
-            inner_radius=hub_radius,
-            outer_radius=inner_radius,
-            rib_width=rib_width,
-            thickness=thickness,
-        ),
-    )
-    return ring
+    sketch = closed_profile(cq.Workplane(plane), outer_points)
+    for hole in holes or ():
+        sketch = closed_profile(sketch, hole)
+    distance = thickness * 0.5 if both else thickness
+    return sketch.extrude(distance, both=both)

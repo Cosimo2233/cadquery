@@ -6,42 +6,41 @@ import cadquery as cq
 SIZE = 50.0
 HEIGHT = 22.0
 TOP_THICKNESS = 4.0
-LEG_THICKNESS = 5.0
-LEG_DEPTH = HEIGHT - TOP_THICKNESS
+LEG_WIDTH = 5.0
+TOP_Z_MIN = 3.743
+BOTTOM_Z = -14.257
 
 
 def build() -> cq.Workplane:
     top = (
         cq.Workplane("XY")
         .rect(SIZE, SIZE)
-        .extrude(TOP_THICKNESS * 0.5, both=True)
-        .translate((0, 0, HEIGHT * 0.5 - TOP_THICKNESS * 0.5))
+        .extrude(TOP_THICKNESS)
+        .translate((0, -7.56, TOP_Z_MIN))
     )
-    for x, y, length, diameter in [
-        (-11.0, 4.0, 18.0, 8.0),
-        (9.0, 12.0, 16.0, 7.0),
-        (10.0, 0.0, 16.0, 7.0),
-        (10.0, -12.0, 16.0, 7.0),
-    ]:
-        top = top.cut(cq.Workplane("XY").center(x, y).slot2D(length, diameter, 90 if x < 0 else 0).extrude(TOP_THICKNESS * 2.5, both=True))
-    legs = cq.Workplane("XY")
-    for x in [-SIZE * 0.5 + LEG_THICKNESS * 0.5, SIZE * 0.5 - LEG_THICKNESS * 0.5]:
-        legs = legs.union(
+    for y in [7.924, -7.454, -23.151]:
+        top = top.cut(
             cq.Workplane("XY")
-            .center(x, 0)
-            .rect(LEG_THICKNESS, SIZE * 0.88)
-            .extrude(LEG_DEPTH)
-            .translate((0, 0, HEIGHT * 0.5 - TOP_THICKNESS - LEG_DEPTH))
+            .center(12.0, y)
+            .slot2D(18.0, 4.0, 0)
+            .extrude(TOP_THICKNESS + 1.0)
+            .translate((0, 0, TOP_Z_MIN - 0.5))
         )
-    front_rib = (
+    top = top.cut(cq.Workplane("XY").center(-14.0, -15.0).circle(3.1).extrude(TOP_THICKNESS + 1.0).translate((0, 0, TOP_Z_MIN - 0.5)))
+    top = top.cut(cq.Workplane("XY").center(-14.0, 0.0).circle(3.1).extrude(TOP_THICKNESS + 1.0).translate((0, 0, TOP_Z_MIN - 0.5)))
+    bridge_cut = cq.Workplane("XY").center(-6.027, -8.045).rect(6.0, 40.0).extrude(TOP_THICKNESS + 1.0).translate((0, 0, TOP_Z_MIN - 0.5))
+    top = top.cut(bridge_cut)
+    leg_height = TOP_Z_MIN - BOTTOM_Z
+    left_leg = cq.Workplane("XY").center(-22.5 + LEG_WIDTH * 0.5, -7.56).rect(LEG_WIDTH, 50.0).extrude(leg_height).translate((0, 0, BOTTOM_Z))
+    right_leg = cq.Workplane("XY").center(22.5 - LEG_WIDTH * 0.5, -7.56).rect(LEG_WIDTH, 50.0).extrude(leg_height).translate((0, 0, BOTTOM_Z))
+    rib = (
         cq.Workplane("XZ")
-        .polyline([(-SIZE * 0.4, 0), (SIZE * 0.4, 0), (0, -LEG_DEPTH * 0.45)])
+        .polyline([(-22.0, -12.8), (22.0, -12.8), (0.0, 3.8)])
         .close()
         .extrude(3.0, both=True)
-        .translate((0, -SIZE * 0.18, 3.0))
+        .translate((0, -7.56, 0.0))
     )
-    back_rib = front_rib.translate((0, SIZE * 0.36, 0))
-    return top.union(legs).union(front_rib).union(back_rib)
+    return top.union(left_leg).union(right_leg).union(rib)
 
 
 result = build()

@@ -3,53 +3,43 @@ from __future__ import annotations
 import cadquery as cq
 
 try:
-    from .common import spoked_ring
+    from .common import extrude_profile, load_profile_points
 except ImportError:
-    from common import spoked_ring
+    from common import extrude_profile, load_profile_points
 
 
-OUTER_RADIUS = 39.0
-INNER_RADIUS = 28.0
+OUTER_PROFILE = load_profile_points(8)
+
 THICKNESS = 18.0
-TOOTH_COUNT = 72
-TOOTH_HEIGHT = 3.0
-TOOTH_WIDTH = 1.6
-RIB_COUNT = 6
-RIB_WIDTH = 5.5
-HUB_RADIUS = 8.8
-HUB_BORE = 5.0
-HUB_HOLE_DIAMETER = 4.2
-HUB_HOLE_RADIUS = 7.3
+CENTER_HOLE_DIAMETER = 30.0
+CENTER_RECESS_DEPTH = 16.0
+BOLT_HOLE_DIAMETER = 3.4
+BOLT_HOLE_RADIUS = 10.0
 
 
 def build() -> cq.Workplane:
-    body = spoked_ring(
-        plane="XY",
-        outer_radius=OUTER_RADIUS,
-        inner_radius=INNER_RADIUS,
-        thickness=THICKNESS,
-        tooth_count=TOOTH_COUNT,
-        tooth_height=TOOTH_HEIGHT,
-        tooth_width=TOOTH_WIDTH,
-        rib_count=RIB_COUNT,
-        rib_width=RIB_WIDTH,
-        hub_radius=HUB_RADIUS,
+    body = extrude_profile("XY", OUTER_PROFILE, THICKNESS)
+    center_recess = (
+        cq.Workplane("XY")
+        .circle(CENTER_HOLE_DIAMETER * 0.5)
+        .extrude(CENTER_RECESS_DEPTH)
+        .translate((0, 0, THICKNESS * 0.5 - CENTER_RECESS_DEPTH))
     )
-    body = body.cut(cq.Workplane("XY").circle(HUB_BORE * 0.5).extrude(THICKNESS * 2.0, both=True))
+    body = body.cut(center_recess)
     bolt_holes = (
         cq.Workplane("XY")
-        .pushPoints(
-            [
-                (0, HUB_HOLE_RADIUS),
-                (HUB_HOLE_RADIUS, 0),
-                (0, -HUB_HOLE_RADIUS),
-                (-HUB_HOLE_RADIUS, 0),
-            ]
-        )
-        .circle(HUB_HOLE_DIAMETER * 0.5)
-        .extrude(THICKNESS * 2.0, both=True)
+        .pushPoints([(0, BOLT_HOLE_RADIUS), (BOLT_HOLE_RADIUS, 0), (0, -BOLT_HOLE_RADIUS), (-BOLT_HOLE_RADIUS, 0)])
+        .circle(BOLT_HOLE_DIAMETER * 0.5)
+        .extrude(THICKNESS * 0.6)
+        .translate((0, 0, -THICKNESS * 0.5))
     )
-    return body.cut(bolt_holes)
+    hub = (
+        cq.Workplane("XY")
+        .circle(11.8)
+        .extrude(2.0)
+        .translate((0, 0, -THICKNESS * 0.5))
+    )
+    return body.union(hub).cut(bolt_holes)
 
 
 result = build()
