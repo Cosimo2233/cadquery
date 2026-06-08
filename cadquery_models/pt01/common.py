@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+"""基于特征重建的 CadQuery 脚本共用工具。"""
+
 import base64
 import json
+import math
 import zlib
 from functools import lru_cache
 from pathlib import Path
@@ -21,12 +24,14 @@ from OCP.gp import gp_Pnt
 
 
 def decode_triangle_blob(blob: str, triangle_count: int) -> np.ndarray:
+    # 将压缩保存的三角面数据解码为 `(n, 3, 3)` 浮点数组。
     raw = zlib.decompress(base64.b64decode(blob.encode("ascii")))
     triangles = np.frombuffer(raw, dtype="<f4").reshape(triangle_count, 3, 3)
     return triangles.astype(np.float64, copy=False)
 
 
 def decode_profile_blob(blob: str, point_count: int) -> list[tuple[float, float]]:
+    # 将压缩保存的二维剖面点解码出来，主要用于齿轮类零件的外轮廓重建。
     raw = zlib.decompress(base64.b64decode(blob.encode("ascii")))
     points = np.frombuffer(raw, dtype="<f4").reshape(point_count, 2)
     return [(float(x), float(y)) for x, y in points]
@@ -34,6 +39,7 @@ def decode_profile_blob(blob: str, point_count: int) -> list[tuple[float, float]
 
 @lru_cache(maxsize=1)
 def load_profile_blobs() -> dict[str, dict[str, object]]:
+    # 剖面数据与脚本放在一起，运行时只读这里，不再访问 STL。
     path = Path(__file__).with_name("profile_blobs.json")
     return json.loads(path.read_text(encoding="utf-8"))
 
@@ -44,6 +50,7 @@ def load_profile_points(part_id: int, loop: str = "outer") -> list[tuple[float, 
 
 
 def build_shape_from_triangles(triangles: np.ndarray) -> cq.Shape:
+    # 将三角网格拼成可缝合的 OCC 形体，主要用于调试或历史兼容。
     sewing = BRepBuilderAPI_Sewing()
 
     for triangle in triangles:
@@ -97,6 +104,32 @@ def closed_profile(workplane: cq.Workplane, points: Sequence[tuple[float, float]
     return workplane.polyline(list(points)).close()
 
 
+def polar_to_cartesian(radius: float, angle_rad: float) -> tuple[float, float]:
+    """将极坐标转换为二维笛卡尔坐标。"""
+    return radius * math.cos(angle_rad), radius * math.sin(angle_rad)
+
+
+def sample_circular_arc(
+    radius: float,
+    start_angle_rad: float,
+    end_angle_rad: float,
+    point_count: int,
+    *,
+    include_start: bool = True,
+    include_end: bool = True,
+) -> list[tuple[float, float]]:
+    """在圆弧上均匀采样点。"""
+    if point_count < 2:
+        raise ValueError("point_count must be at least 2")
+
+    angles = np.linspace(start_angle_rad, end_angle_rad, point_count)
+    if not include_start:
+        angles = angles[1:]
+    if not include_end:
+        angles = angles[:-1]
+    return [polar_to_cartesian(radius, float(angle)) for angle in angles]
+
+
 def extrude_profile(
     plane: str,
     outer_points: Sequence[tuple[float, float]],
@@ -104,6 +137,7 @@ def extrude_profile(
     holes: Sequence[Sequence[tuple[float, float]]] | None = None,
     both: bool = True,
 ) -> cq.Workplane:
+    # 先构造封闭平面轮廓，必要时加入内孔轮廓，再整体拉伸成实体。
     sketch = closed_profile(cq.Workplane(plane), outer_points)
     for hole in holes or ():
         sketch = closed_profile(sketch, hole)

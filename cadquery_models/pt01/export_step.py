@@ -7,6 +7,7 @@ from pathlib import Path
 
 
 def ensure_venv_python() -> None:
+    # 强制切回项目虚拟环境运行，避免 CadQuery / OCC 混用不同解释器。
     base_dir = Path(__file__).resolve().parent
     repo_root = base_dir.parents[1]
     venv_python = repo_root / ".venv" / "Scripts" / "python.exe"
@@ -22,12 +23,14 @@ def main() -> None:
 
     base_dir = Path(__file__).resolve().parent
     repo_root = base_dir.parents[1]
+    # 将仓库根目录加入导入路径，便于直接加载 `cadquery_models.pt01.part_xx`。
     if str(repo_root) not in sys.path:
         sys.path.insert(0, str(repo_root))
 
     out_dir = base_dir / "exports" / "step"
     out_dir.mkdir(parents=True, exist_ok=True)
 
+    # 将 01 到 10 的重建脚本逐个导出为同名 STEP 文件。
     for idx in range(1, 11):
         module = importlib.import_module(f"cadquery_models.pt01.part_{idx:02d}")
         output_path = out_dir / f"part_{idx:02d}.step"

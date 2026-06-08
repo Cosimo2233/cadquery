@@ -8,7 +8,7 @@ wandb/
 tmp_workspace/
 tmp-workspace/
 .hydra
-
+record_md/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

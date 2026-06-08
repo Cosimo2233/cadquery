@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""零件 10：带槽阵列、侧腿、侧孔和中间加强筋的框形支架。"""
+
 import cadquery as cq
 
 
@@ -20,6 +22,7 @@ SMALL_HOLE_POS = [(-20.217, 77.760), (-20.167, 67.893), (-20.121, 87.745)]
 
 def build() -> cq.Workplane:
     center_y = (57.037 + 106.975) * 0.5
+    # 顶板上布置矩形槽阵列和几个小圆孔。
     top = (
         cq.Workplane("XY")
         .center(0, center_y)
@@ -31,9 +34,11 @@ def build() -> cq.Workplane:
         top = top.cut(cq.Workplane("XY").center(x, y).slot2D(14.0, 8.0, 0).extrude(TOP_THICKNESS + 1.0).translate((0, 0, TOP_Z_MIN - 0.5)))
     for x, y in SMALL_HOLE_POS:
         top = top.cut(cq.Workplane("XY").center(x, y).circle(2.65).extrude(TOP_THICKNESS + 1.0).translate((0, 0, TOP_Z_MIN - 0.5)))
+    # 两侧立板定义顶板下方的支架主体。
     leg_height = TOP_Z_MIN - BOTTOM_Z
     left_leg = cq.Workplane("XY").center(-22.5 + LEG_WIDTH * 0.5, center_y).rect(LEG_WIDTH, SIZE_Y).extrude(leg_height).translate((0, 0, BOTTOM_Z))
     right_leg = cq.Workplane("XY").center(22.5 - LEG_WIDTH * 0.5, center_y).rect(LEG_WIDTH, SIZE_Y).extrude(leg_height).translate((0, 0, BOTTOM_Z))
+    # 侧面圆孔和内部三角筋用于逼近 STL 中可见的支撑细节。
     side_hole = cq.Workplane("XZ").center(0, -4.5).circle(7.0).extrude(LEG_WIDTH * 1.2, both=True)
     left_leg = left_leg.cut(side_hole.translate((-22.5 + LEG_WIDTH * 0.5, 0, 0)))
     right_leg = right_leg.cut(side_hole.translate((22.5 - LEG_WIDTH * 0.5, 0, 0)))

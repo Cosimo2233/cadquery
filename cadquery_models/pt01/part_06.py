@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""零件 06：带中心环形凸台、端部凸台和多组小孔的长条板件。"""
+
 import cadquery as cq
 
 try:
@@ -30,10 +32,13 @@ SMALL_HOLE_POS = [
 
 
 def build() -> cq.Workplane:
+    # 先构建长条主板外轮廓。
     body = extrude_profile("XY", OUTER_PROFILE, THICKNESS)
+    # 中间环形凸台和端部凸台作为独立功能特征叠加。
     center_ring = cq.Workplane("XY").circle(CENTER_RING_OUTER * 0.5).circle(CENTER_RING_INNER * 0.5).extrude(7.895).translate((0, 0, -THICKNESS * 0.5))
     end_boss = cq.Workplane("XY").center(*END_BOSS_POS).circle(END_BOSS_OUTER * 0.5).circle(END_BOSS_INNER * 0.5).extrude(3.0)
     body = body.union(center_ring).union(end_boss)
+    # 小孔在并体后统一切出，保证孔贯穿最终实体。
     small_cuts = cq.Workplane("XY").pushPoints(SMALL_HOLE_POS).circle(SMALL_HOLE_DIAMETER * 0.5).extrude(THICKNESS * 0.75, both=True)
     return body.cut(small_cuts)
 

@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""零件 01：带顶面开槽、侧腿和中间加强筋的 U 形支架。"""
+
 import cadquery as cq
 
 
@@ -12,6 +14,7 @@ BOTTOM_Z = -14.257
 
 
 def build() -> cq.Workplane:
+    # 顶板上包含长槽、圆孔和中间贯通开口。
     top = (
         cq.Workplane("XY")
         .rect(SIZE, SIZE)
@@ -30,9 +33,11 @@ def build() -> cq.Workplane:
     top = top.cut(cq.Workplane("XY").center(-14.0, 0.0).circle(3.1).extrude(TOP_THICKNESS + 1.0).translate((0, 0, TOP_Z_MIN - 0.5)))
     bridge_cut = cq.Workplane("XY").center(-6.027, -8.045).rect(6.0, 40.0).extrude(TOP_THICKNESS + 1.0).translate((0, 0, TOP_Z_MIN - 0.5))
     top = top.cut(bridge_cut)
+    # 两侧竖腿从顶板向下延伸，形成支架主体。
     leg_height = TOP_Z_MIN - BOTTOM_Z
     left_leg = cq.Workplane("XY").center(-22.5 + LEG_WIDTH * 0.5, -7.56).rect(LEG_WIDTH, 50.0).extrude(leg_height).translate((0, 0, BOTTOM_Z))
     right_leg = cq.Workplane("XY").center(22.5 - LEG_WIDTH * 0.5, -7.56).rect(LEG_WIDTH, 50.0).extrude(leg_height).translate((0, 0, BOTTOM_Z))
+    # 中间三角筋用于逼近 STL 中可见的内部支撑结构。
     rib = (
         cq.Workplane("XZ")
         .polyline([(-22.0, -12.8), (22.0, -12.8), (0.0, 3.8)])

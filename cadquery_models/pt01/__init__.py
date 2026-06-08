@@ -1,1 +1,1 @@
-"""CadQuery reconstructions for data-bin/pt01."""
+"""`data-bin/pt01` 对应的 CadQuery 重建脚本集合。"""

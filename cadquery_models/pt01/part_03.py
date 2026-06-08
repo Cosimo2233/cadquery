@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+"""零件 03：带大孔、顶部小孔和底部加厚边的板式支架。"""
+
 import cadquery as cq
 
 try:
@@ -33,7 +35,9 @@ Y_MID = -38.811
 
 
 def build() -> cq.Workplane:
+    # 正视轮廓用于还原支架顶部两侧的圆滑肩部外形。
     body = extrude_profile("XZ", FRONT_PROFILE, THICKNESS).translate((0, Y_MID, 0))
+    # 主安装孔和辅助孔统一用解析圆孔切除。
     body = body.cut(
         cq.Workplane("XZ")
         .center(*MAIN_HOLE_POS)
@@ -56,6 +60,7 @@ def build() -> cq.Workplane:
         .translate((0, Y_MID, 0))
     )
     body = body.cut(corner_cutters)
+    # 底边额外加一条矩形基座，用来逼近 STL 的下缘加强区。
     base = (
         cq.Workplane("XZ")
         .center(0, BASE_Z)
