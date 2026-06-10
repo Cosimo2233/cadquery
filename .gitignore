@@ -9,6 +9,7 @@ tmp_workspace/
 tmp-workspace/
 .hydra
 record_md/
+test_step/exports/
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
